@@ -3,8 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
+import matplotlib.pyplot as plt
 from setup import device, frames, env
-
+from setup import PAPER, TEAL, GOLD, CLAY
 Z = 16
 
 class ConvVAE(nn.Module):
@@ -59,3 +60,35 @@ for epoch in range(30):
 print(f"V trained in {time.time()-t0:.0f}s   "
       f"({sum(p.numel() for p in vae.parameters()):,} parameters)")
 
+
+
+
+
+vae.eval()
+with torch.no_grad():
+    test = flat[:20000:2611][:8].to(device)
+    recon, _, _ = vae(test)
+
+    fig, axes = plt.subplots(2, 8, figsize=(12, 3.4))
+    for i in range(8):
+        axes[0, i].imshow(test[i].cpu()); axes[0, i].axis("off")
+        axes[1, i].imshow(recon[i].cpu().clamp(0, 1)); axes[1, i].axis("off")
+    axes[0, 0].set_title("original", loc="left", color=TEAL)
+    axes[1, 0].set_title("V's reconstruction (from 16 numbers)", loc="left", color=CLAY)
+    fig.suptitle("V — 1,728 pixels → 16 numbers → 1,728 pixels", y=1.02)
+    plt.tight_layout(); plt.savefig("plot_v_recon.png", dpi=150, bbox_inches="tight"); plt.show()
+
+    # latent walk between two frames of the SAME episode, half a lap apart
+    e_walk = 2
+    z1, _ = vae.encode(torch.tensor(frames[e_walk, 0:1]).to(device))
+    z2, _ = vae.encode(torch.tensor(frames[e_walk, 26:27]).to(device))
+    steps = torch.linspace(0, 1, 9, device=device).view(-1, 1)
+    walk = vae.decode(z1 + steps * (z2 - z1))
+
+    fig, axes = plt.subplots(1, 9, figsize=(12, 1.8))
+    for i in range(9):
+        axes[i].imshow(walk[i].cpu().clamp(0, 1)); axes[i].axis("off")
+    axes[0].set_title("code A", loc="left", color=TEAL)
+    axes[-1].set_title("code B", loc="right", color=GOLD)
+    fig.suptitle("The smooth walk — the car glides around the track between two codes", y=1.15)
+    plt.tight_layout(); plt.savefig("plot_v_walk.png", dpi=150, bbox_inches="tight"); plt.show()
